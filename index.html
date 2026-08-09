@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#10243b">
-<title>It's All in the Hips — v0.6.3</title>
+<title>It's All in the Hips — v0.7.0</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10243b;color:white;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
@@ -47,7 +47,7 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
    <p>Tilt to carve. Line up jumps, rails, and boxes for points. Dodge trees and skiers. Hold the phone comfortably when you start — that becomes neutral.</p>
    <button id="start">START / ENABLE TILT</button>
    <button id="desktop" class="secondary">DESKTOP TEST</button>
-   <p class="small">v0.6.3 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
+   <p class="small">v0.7.0 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
  </div>
 </div>
 <div id="endOverlay" style="display:none;position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;padding:22px;background:rgba(8,24,42,.94)">
@@ -71,10 +71,10 @@ const quitBtn=document.getElementById('quit'),endOverlay=document.getElementById
 const finalScore=document.getElementById('finalScore'),endReason=document.getElementById('endReason');
 
 let W=0,H=0,dpr=1,last=0,running=false,time=0;
-let score=0,streak=0,gameSpeed=0.34,spawnTimer=.5,skierTimer=1.8,skierHits=0,patrol=false,patrolGap=100,patrolIntro=0,patrolHit=0;
+let score=0,streak=0,gameSpeed=0.34,spawnTimer=.5,skierTimer=1.8,waffleTimer=7,skierHits=0,patrol=false,patrolGap=100,patrolIntro=0,patrolHit=0,patrolLevel=0;
 let rawGamma=0,rawBeta=0,neutralGamma=0,neutralBeta=0,tilt=0,motionActive=false;
 let riderX=0,targetX=0,carveVel=0,flash=0,perfectText=0,airTime=0,grindTime=0,grindType='',impactTime=0,impactSide=1,feedback='',feedbackTime=0,boostTime=0;
-let gates=[],snow=[],trees=[],obstacles=[];
+let gates=[],snow=[],trees=[],obstacles=[],waffles=[];
 const keys={};
 
 function resize(){
@@ -104,8 +104,8 @@ function project(x,z){
 }
 
 function reset(){
- score=0;streak=0;gameSpeed=.34;spawnTimer=.25;skierTimer=1.5;skierHits=0;patrol=false;patrolGap=100;patrolIntro=0;patrolHit=0;gates=[];snow=[];
- riderX=0;targetX=0;carveVel=0;flash=0;perfectText=0;airTime=0;grindTime=0;grindType='';impactTime=0;feedback='';feedbackTime=0;boostTime=0;obstacles=[];
+ score=0;streak=0;gameSpeed=.34;spawnTimer=.25;skierTimer=1.5;waffleTimer=6+Math.random()*5;skierHits=0;patrol=false;patrolGap=100;patrolIntro=0;patrolHit=0;patrolLevel=0;gates=[];snow=[];
+ riderX=0;targetX=0;carveVel=0;flash=0;perfectText=0;airTime=0;grindTime=0;grindType='';impactTime=0;feedback='';feedbackTime=0;boostTime=0;obstacles=[];waffles=[];
  updateHUD();
 }
 
@@ -113,7 +113,7 @@ function updateHUD(){
  scoreEl.textContent=score.toLocaleString();
  flowEl.textContent='FLOW ×'+Math.max(1,Math.min(9,1+Math.floor(streak/3)));
  speedEl.textContent=Math.round(24+gameSpeed*105)+' MPH';
- heatEl.textContent=patrol?('🚨 PATROL  '+Math.round(patrolGap)+'m'):('SKIERS '+skierHits+'/3');
+ heatEl.textContent=patrol?('🚨 PATROL '+patrolLevel+'/4  '+Math.round(patrolGap)+'m'):('SKIERS '+skierHits+'/3'+(patrolLevel?' • HEAT '+patrolLevel+'/4':''));
 }
 
 function calibrate(){
@@ -174,7 +174,8 @@ function spawnGate(){
  if(Math.random()<.78){
    let ox;
    do{ox=(Math.random()*1.45)-.725;}while(Math.abs(ox-x)<.38);
-   obstacles.push({x:ox,z:0.015,type:Math.random()<.82?'tree':'skier',hit:false});
+   const ot=Math.random()<.82?'tree':'skier';
+   obstacles.push({x:ox,z:0.015,type:ot,hit:false,skierStyle:ot==='skier'?(Math.random()<.55?'fries':'pizza'):null,baseX:ox,wobble:Math.random()*Math.PI*2});
  }
 }
 function burst(x,y){
@@ -208,10 +209,27 @@ function update(dt){
  skierTimer-=dt;
  if(skierTimer<=0){
    const sx=(Math.random()*1.45)-.725;
-   obstacles.push({x:sx,z:0.015,type:'skier',hit:false});
+   obstacles.push({x:sx,z:0.015,type:'skier',hit:false,skierStyle:Math.random()<.55?'fries':'pizza',baseX:sx,wobble:Math.random()*Math.PI*2});
    const speedRatio=Math.max(0,Math.min(1,(gameSpeed-.34)/(.78-.34)));
    skierTimer=(1.9-speedRatio*1.18)*(0.82+Math.random()*.38);
  }
+
+ // Rare Liège waffle collectible.
+ waffleTimer-=dt;
+ if(waffleTimer<=0){
+   const wx=(Math.random()*1.3)-.65;
+   waffles.push({x:wx,z:.015,hit:false,spin:Math.random()*Math.PI*2});
+   waffleTimer=7+Math.random()*8;
+ }
+ for(const w of waffles){
+   w.z+=gameSpeed*dt;w.spin+=dt*3;
+   if(!w.hit&&w.z>.88&&w.z<1.03&&Math.abs(riderX-w.x)<.12){
+     w.hit=true;score+=1000;feedback='🧇 LIÈGE WAFFLE  +1000';feedbackTime=1.15;
+     const wp=project(w.x,w.z);burst(wp.x,wp.y);updateHUD();
+     if(navigator.vibrate)navigator.vibrate([18,20,18]);
+   }
+ }
+ waffles=waffles.filter(w=>!w.hit&&w.z<1.12);
 
  for(const g of gates){
    g.z+=gameSpeed*dt;
@@ -225,9 +243,9 @@ function update(dt){
        if(g.type==='jump'){
          airTime=.72; boostTime=2.2; feedback='AIR!  +'+(base*mult)+'  SPEED UP';
        }else if(g.type==='rail'){
-         grindTime=.72; grindType='rail'; if(patrol)patrolGap=Math.min(120,patrolGap+8); feedback='RAIL GRIND  +'+(base*mult);
+         grindTime=.72; grindType='rail'; if(patrol)patrolGap=Math.min(patrolLevel===4?92:120,patrolGap+(patrolLevel===1?8:patrolLevel===2?6:patrolLevel===3?4:2)); feedback='RAIL GRIND  +'+(base*mult);
        }else{
-         grindTime=.9; grindType='box'; if(patrol)patrolGap=Math.min(120,patrolGap+10); feedback='BOX SPIN  +'+(base*mult);
+         grindTime=.9; grindType='box'; if(patrol)patrolGap=Math.min(patrolLevel===4?92:120,patrolGap+(patrolLevel===1?10:patrolLevel===2?8:patrolLevel===3?5:2)); feedback='BOX SPIN  +'+(base*mult);
        }
        feedbackTime=.75;flash=.11;perfectText=.45;updateHUD();
        if(navigator.vibrate)navigator.vibrate(streak%3===0?[15,18,28]:16);
@@ -239,6 +257,9 @@ function update(dt){
  gates=gates.filter(g=>g.z<1.15);
  for(const o of obstacles){
    o.z+=gameSpeed*dt;
+   if(o.type==='skier'&&o.skierStyle==='fries'&&!o.hit){
+     o.x=Math.max(-.76,Math.min(.76,o.baseX+Math.sin(time*1.65+o.wobble)*.13));
+   }
    if(!o.hit&&o.z>.895&&o.z<1.02&&Math.abs(riderX-o.x)<(o.type==='tree'?.075:.09)){
      o.hit=true;
      impactTime=.65; impactSide=Math.sign(o.x-riderX)||1;
@@ -251,8 +272,10 @@ function update(dt){
        else{
          skierHits++;
          if(skierHits>=3){
-           patrol=true;patrolGap=68;patrolIntro=1.8;skierHits=3;
-           feedback='🚨 SKI PATROL INBOUND 🚨';
+           patrol=true;patrolLevel=Math.min(4,patrolLevel+1);
+           patrolGap=patrolLevel===1?68:patrolLevel===2?58:patrolLevel===3?48:42;
+           patrolIntro=1.8;skierHits=3;
+           feedback=patrolLevel===4?'🚨 PATROL HAS HAD ENOUGH 🚨':'🚨 SKI PATROL INBOUND • LEVEL '+patrolLevel+' 🚨';
          }
        }
      }else if(patrol){patrolGap-=25;}
@@ -277,10 +300,11 @@ function update(dt){
    patrolIntro=Math.max(0,patrolIntro-dt);
    // Clean riding slowly opens the gap. Features accelerate the escape;
    // crashes and steamrolling skiers let Patrol reel you back in.
-   const cleanGain=2.6;
+   const cleanGain=patrolLevel===1?2.6:patrolLevel===2?1.7:patrolLevel===3?.85:-5.5;
    patrolGap+=dt*cleanGain;
-   patrolGap=Math.min(120,patrolGap);
-   if(patrolGap>=120){
+   if(patrolLevel===4) patrolGap=Math.min(92,patrolGap);
+   else patrolGap=Math.min(120,patrolGap);
+   if(patrolLevel<4&&patrolGap>=120){
      patrol=false;skierHits=0;patrolGap=100;
      feedback='PATROL LOST!';feedbackTime=1.3;
    }else if(patrolGap<=0){
@@ -405,12 +429,32 @@ function drawObstacle(o){
    ctx.fillStyle='#214b43';
    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(0,(-78+i*18)*s);ctx.lineTo((-27-i*3)*s,(-24+i*10)*s);ctx.lineTo((27+i*3)*s,(-24+i*10)*s);ctx.closePath();ctx.fill();}
  }else{
-   ctx.strokeStyle='#263746';ctx.lineWidth=Math.max(2,6*s);ctx.lineCap='round';
-   ctx.beginPath();ctx.moveTo(0,-48*s);ctx.lineTo(-5*s,-23*s);ctx.moveTo(-5*s,-23*s);ctx.lineTo(-20*s,0);ctx.moveTo(-5*s,-23*s);ctx.lineTo(17*s,0);ctx.stroke();
-   ctx.fillStyle='#2879c7';ctx.fillRect(-9*s,-48*s,18*s,24*s);
-   ctx.fillStyle='#f0c5a5';ctx.beginPath();ctx.arc(0,-58*s,8*s,0,Math.PI*2);ctx.fill();
-   ctx.strokeStyle='#263746';ctx.lineWidth=Math.max(1,3*s);ctx.beginPath();ctx.moveTo(-25*s,3*s);ctx.lineTo(22*s,3*s);ctx.stroke();
+   const pizza=o.skierStyle==='pizza';
+   ctx.strokeStyle='#263746';ctx.lineCap='round';
+   // unmistakably two skis
+   ctx.lineWidth=Math.max(1.5,3*s);ctx.beginPath();
+   if(pizza){ctx.moveTo(-5*s,-2*s);ctx.lineTo(-28*s,20*s);ctx.moveTo(5*s,-2*s);ctx.lineTo(28*s,20*s);}
+   else{ctx.moveTo(-8*s,-5*s);ctx.lineTo(-8*s,25*s);ctx.moveTo(8*s,-5*s);ctx.lineTo(8*s,25*s);}
+   ctx.stroke();
+   // separate legs
+   ctx.lineWidth=Math.max(2,5*s);ctx.beginPath();ctx.moveTo(-4*s,-28*s);ctx.lineTo(-8*s,-4*s);ctx.moveTo(4*s,-28*s);ctx.lineTo(8*s,-4*s);ctx.stroke();
+   // blue jacket
+   ctx.fillStyle='#2879c7';ctx.fillRect(-10*s,-54*s,20*s,28*s);
+   // arms and poles
+   ctx.strokeStyle='#263746';ctx.lineWidth=Math.max(1.5,4*s);ctx.beginPath();ctx.moveTo(-8*s,-47*s);ctx.lineTo(-23*s,-31*s);ctx.moveTo(8*s,-47*s);ctx.lineTo(23*s,-31*s);ctx.stroke();
+   ctx.lineWidth=Math.max(1,1.5*s);ctx.beginPath();ctx.moveTo(-23*s,-31*s);ctx.lineTo(-30*s,11*s);ctx.moveTo(23*s,-31*s);ctx.lineTo(30*s,11*s);ctx.stroke();
+   ctx.fillStyle='#f0c5a5';ctx.beginPath();ctx.arc(0,-64*s,8*s,0,Math.PI*2);ctx.fill();
+   ctx.fillStyle='#1d4f83';ctx.beginPath();ctx.arc(0,-68*s,9*s,Math.PI,Math.PI*2);ctx.fill();
  }
+ ctx.restore();
+}
+function drawWaffle(w){
+ const p=project(w.x,w.z),s=p.scale;
+ ctx.save();ctx.translate(p.x,p.y-14*s);ctx.rotate(Math.sin(w.spin)*.12);
+ ctx.fillStyle='#d99a32';ctx.strokeStyle='#9b641f';ctx.lineWidth=Math.max(1,2*s);
+ ctx.beginPath();ctx.moveTo(-20*s,-15*s);ctx.lineTo(15*s,-19*s);ctx.lineTo(23*s,-5*s);ctx.lineTo(18*s,17*s);ctx.lineTo(-15*s,20*s);ctx.lineTo(-24*s,5*s);ctx.closePath();ctx.fill();ctx.stroke();
+ ctx.strokeStyle='rgba(117,70,22,.58)';ctx.lineWidth=Math.max(1,1.4*s);
+ for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(i*9*s,-15*s);ctx.lineTo(i*9*s,16*s);ctx.stroke();ctx.beginPath();ctx.moveTo(-18*s,i*9*s);ctx.lineTo(18*s,i*9*s);ctx.stroke();}
  ctx.restore();
 }
 function drawPatrol(){
@@ -509,6 +553,7 @@ function draw(){
  [...trees].sort((a,b)=>a.z-b.z).forEach(drawTree);
  [...gates].sort((a,b)=>a.z-b.z).forEach(drawGate);
  [...obstacles].sort((a,b)=>a.z-b.z).forEach(drawObstacle);
+ [...waffles].sort((a,b)=>a.z-b.z).forEach(drawWaffle);
  drawRider();
  drawPatrol();
 
@@ -540,7 +585,7 @@ function draw(){
  if(patrolIntro>0){
    ctx.textAlign='center';ctx.font='900 '+Math.max(24,W*.03)+'px system-ui';
    ctx.fillStyle='rgba(210,35,35,'+Math.min(1,patrolIntro)+')';
-   ctx.fillText('🚨 SKI PATROL INBOUND 🚨',W/2,H*.20);
+   ctx.fillText(patrolLevel===4?'🚨 FINAL PATROL 🚨':'🚨 SKI PATROL • LEVEL '+patrolLevel+' 🚨',W/2,H*.20);
  }
  if(feedbackTime>0){
    ctx.textAlign='center';ctx.font='900 '+Math.max(20,W*.023)+'px system-ui';
