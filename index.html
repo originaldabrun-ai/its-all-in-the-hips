@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#10243b">
-<title>It's All in the Hips — v0.6.2</title>
+<title>It's All in the Hips — v0.6.3</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10243b;color:white;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
@@ -47,7 +47,7 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
    <p>Tilt to carve. Line up jumps, rails, and boxes for points. Dodge trees and skiers. Hold the phone comfortably when you start — that becomes neutral.</p>
    <button id="start">START / ENABLE TILT</button>
    <button id="desktop" class="secondary">DESKTOP TEST</button>
-   <p class="small">v0.6.2 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
+   <p class="small">v0.6.3 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
  </div>
 </div>
 <div id="endOverlay" style="display:none;position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;padding:22px;background:rgba(8,24,42,.94)">
@@ -441,24 +441,37 @@ function drawPatrol(){
 function drawRider(){
  const p=project(riderX,patrol?.82:.91);
  ctx.save();
- let animY=0,animRot=0;
+ let animY=0,animRot=0,spinScaleX=1,spinSkew=0;
  if(airTime>0){
    const phase=1-airTime/.72;
    animY=-Math.sin(phase*Math.PI)*82;
-   // Full backflip over the jump.
+   // Jump = cartwheel/front-axis style flip in screen space.
+   // The squash/stretch sells rotation around a different axis than the box spin.
    animRot=-phase*Math.PI*2;
+   spinScaleX=.82+.18*Math.abs(Math.cos(phase*Math.PI*2));
  }
  if(grindTime>0){
    animY=-8;
    const duration=grindType==='box'?.9:.72;
    const phase=1-grindTime/duration;
-   // Boxes get a full board/rider spin; rails stay mostly locked into a grind.
-   animRot=grindType==='box'?phase*Math.PI*2:.12*Math.sin(time*18);
+   if(grindType==='box'){
+     // Box = flat 360 around the rider's vertical axis.
+     // Canvas is 2-D, so simulate yaw by narrowing/mirroring the rider as he turns edge-on.
+     const yaw=phase*Math.PI*2;
+     spinScaleX=Math.cos(yaw);
+     if(Math.abs(spinScaleX)<.12) spinScaleX=.12*Math.sign(spinScaleX||1);
+     spinSkew=Math.sin(yaw)*.16;
+     animRot=.04*Math.sin(yaw);
+   }else{
+     // Rail stays locked into a subtle boardslide/grind.
+     animRot=.12*Math.sin(time*18);
+   }
  }
  if(impactTime>0){animRot=-impactSide*.65*(impactTime/.65);animY=-Math.sin((1-impactTime/.65)*Math.PI)*18;}
  ctx.translate(p.x,p.y+animY);
  const lean=Math.max(-.5,Math.min(.5,carveVel*.035));
  ctx.rotate(lean+animRot);
+ ctx.transform(spinScaleX,0,spinSkew,1,0,0);
 
  // shadow
  ctx.fillStyle='rgba(35,67,86,.16)';ctx.beginPath();ctx.ellipse(10,13,42,9,0,0,Math.PI*2);ctx.fill();
