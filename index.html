@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#10243b">
-<title>It's All in the Hips — v0.1</title>
+<title>It's All in the Hips — v0.6.2</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10243b;color:white;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
@@ -47,7 +47,7 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
    <p>Tilt to carve. Line up jumps, rails, and boxes for points. Dodge trees and skiers. Hold the phone comfortably when you start — that becomes neutral.</p>
    <button id="start">START / ENABLE TILT</button>
    <button id="desktop" class="secondary">DESKTOP TEST</button>
-   <p class="small">Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
+   <p class="small">v0.6.2 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
  </div>
 </div>
 <div id="endOverlay" style="display:none;position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;padding:22px;background:rgba(8,24,42,.94)">
@@ -72,7 +72,7 @@ const finalScore=document.getElementById('finalScore'),endReason=document.getEle
 
 let W=0,H=0,dpr=1,last=0,running=false,time=0;
 let score=0,streak=0,gameSpeed=0.34,spawnTimer=.5,skierTimer=1.8,skierHits=0,patrol=false,patrolGap=100,patrolIntro=0,patrolHit=0;
-let rawGamma=0,neutralGamma=0,tilt=0,motionActive=false;
+let rawGamma=0,rawBeta=0,neutralGamma=0,neutralBeta=0,tilt=0,motionActive=false;
 let riderX=0,targetX=0,carveVel=0,flash=0,perfectText=0,airTime=0,grindTime=0,grindType='',impactTime=0,impactSide=1,feedback='',feedbackTime=0,boostTime=0;
 let gates=[],snow=[],trees=[],obstacles=[];
 const keys={};
@@ -118,7 +118,8 @@ function updateHUD(){
 
 function calibrate(){
  neutralGamma=rawGamma||0;
- statusEl.textContent=motionActive?'TILT ACTIVE • neutral '+neutralGamma.toFixed(1)+'°':'← → or A / D on desktop';
+ neutralBeta=rawBeta||0;
+ statusEl.textContent=motionActive?'TILT ACTIVE • neutral '+neutralBeta.toFixed(1)+'°':'← → or A / D on desktop';
  if(navigator.vibrate)navigator.vibrate(18);
 }
 
@@ -130,8 +131,10 @@ async function enableMotion(){
    }
    addEventListener('deviceorientation',e=>{
      if(e.gamma==null)return;
-     rawGamma=e.gamma;motionActive=true;
-     tilt=Math.max(-1,Math.min(1,(rawGamma-neutralGamma)/18));
+     rawGamma=e.gamma;rawBeta=e.beta;motionActive=true;
+     // Game is landscape-only. On iPhone, beta maps to the physical
+     // left/right roll players expect while holding the phone sideways.
+     tilt=Math.max(-1,Math.min(1,(rawBeta-neutralBeta)/18));
    },true);
    motionActive=true;calibrate();
  }catch(e){statusEl.textContent='Tilt unavailable — keyboard controls still work';}
