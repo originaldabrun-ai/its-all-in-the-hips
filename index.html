@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#10243b">
-<title>It's All in the Hips — v0.7.4</title>
+<title>It's All in the Hips — v0.7.5</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10243b;color:white;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
@@ -48,7 +48,7 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
    <p>Tilt to carve. Line up jumps, rails, and boxes for points. Dodge trees and skiers. Hold the phone comfortably when you start — that becomes neutral.</p>
    <button id="start">START / ENABLE TILT</button>
    <button id="desktop" class="secondary">DESKTOP TEST</button>
-   <p class="small">v0.7.4 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
+   <p class="small">v0.7.5 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
  </div>
 </div>
 <div id="endOverlay" style="display:none;position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;padding:22px;background:rgba(8,24,42,.94)">
@@ -526,13 +526,12 @@ function drawPatrol(){
 function drawRider(){
  const p=project(riderX,patrol?.82:.91);
  ctx.save();
- let animY=0,animRot=0,spinScaleX=1,spinSkew=0;
+
+ let animY=0,trickRot=0,spinScaleX=1,spinSkew=0;
  if(airTime>0){
    const phase=1-airTime/.72;
    animY=-Math.sin(phase*Math.PI)*82;
-   // Jump = cartwheel/front-axis style flip in screen space.
-   // The squash/stretch sells rotation around a different axis than the box spin.
-   animRot=-phase*Math.PI*2;
+   trickRot=-phase*Math.PI*2;
    spinScaleX=.82+.18*Math.abs(Math.cos(phase*Math.PI*2));
  }
  if(grindTime>0){
@@ -540,80 +539,62 @@ function drawRider(){
    const duration=grindType==='box'?.9:.72;
    const phase=1-grindTime/duration;
    if(grindType==='box'){
-     // Box = flat 360 around the rider's vertical axis.
-     // Canvas is 2-D, so simulate yaw by narrowing/mirroring the rider as he turns edge-on.
      const yaw=phase*Math.PI*2;
      spinScaleX=Math.cos(yaw);
-     if(Math.abs(spinScaleX)<.12) spinScaleX=.12*Math.sign(spinScaleX||1);
+     if(Math.abs(spinScaleX)<.12)spinScaleX=.12*Math.sign(spinScaleX||1);
      spinSkew=Math.sin(yaw)*.16;
-     animRot=.04*Math.sin(yaw);
+     trickRot=.04*Math.sin(yaw);
    }else{
-     // Rail stays locked into a subtle boardslide/grind.
-     animRot=.12*Math.sin(time*18);
+     trickRot=.12*Math.sin(time*18);
    }
  }
- if(impactTime>0){animRot=-impactSide*.65*(impactTime/.65);animY=-Math.sin((1-impactTime/.65)*Math.PI)*18;}
+ if(impactTime>0){
+   trickRot=-impactSide*.65*(impactTime/.65);
+   animY=-Math.sin((1-impactTime/.65)*Math.PI)*18;
+ }
+
  ctx.translate(p.x,p.y+animY);
 
- // BOARD: draw independently in screen space so the carve angle is unmistakable.
- // Lateral velocity makes it slash one way or the other; near zero returns horizontal.
- const carveAngle=0;
- ctx.save();
- ctx.rotate(carveAngle);
- ctx.fillStyle='#17283b';
- ctx.beginPath();ctx.roundRect(-45,0,90,10,5);ctx.fill();
- ctx.fillStyle='rgba(255,255,255,.28)';ctx.fillRect(-31,2,62,2);
- // bindings make board orientation easier to perceive
- ctx.fillStyle='#506173';ctx.fillRect(-19,-2,8,14);ctx.fillRect(11,-2,8,14);
- ctx.restore();
-
- // RIDER: lean/trick transforms are separate from board carve.
- const lean=Math.max(-.5,Math.min(.5,carveVel*.035));
- // Strong directional carve silhouette: the whole rider/board points diagonally
- // across the fall line, rather than merely sliding sideways.
- const carveHeading=Math.max(-.72,Math.min(.72,carveVel*.11));
- ctx.rotate(carveHeading+animRot);
+ // NORMAL CARVE: rotate the ENTIRE snowboarder assembly.
+ // The board and rider can no longer rotate independently.
+ // At meaningful lateral velocity the board approaches ±45° from horizontal,
+ // giving the requested / and \ carving silhouette.
+ const dead=.012;
+ let carveHeading=0;
+ if(Math.abs(carveVel)>dead){
+   const strength=Math.min(1,Math.abs(carveVel)/7.0);
+   carveHeading=Math.sign(carveVel)*(.28 + strength*(Math.PI/4-.28));
+ }
+ // Smooth-looking visual heading, but still snaps back toward straight near center.
+ ctx.rotate(carveHeading + trickRot);
  ctx.transform(spinScaleX,0,spinSkew,1,0,0);
 
- // rider legs/body
+ // Snowboard — part of the same transformed assembly as the rider.
+ ctx.fillStyle='#17283b';
+ ctx.beginPath();ctx.roundRect(-46,0,92,11,6);ctx.fill();
+ ctx.fillStyle='rgba(255,255,255,.28)';ctx.fillRect(-31,2,62,2);
+ ctx.fillStyle='#506173';ctx.fillRect(-20,-2,9,14);ctx.fillRect(11,-2,9,14);
+
+ // Wide snowboard stance.
  ctx.strokeStyle='#18283a';ctx.lineWidth=7;ctx.lineCap='round';
- ctx.beginPath();ctx.moveTo(-12,0);ctx.lineTo(-4,-24);ctx.lineTo(3,-42);ctx.stroke();
- ctx.beginPath();ctx.moveTo(13,0);ctx.lineTo(7,-23);ctx.lineTo(3,-42);ctx.stroke();
- ctx.strokeStyle='#e26b39';ctx.lineWidth=13;
- ctx.beginPath();ctx.moveTo(3,-42);ctx.lineTo(0,-72);ctx.stroke();
- // arms
- ctx.strokeStyle='#18283a';ctx.lineWidth=6;
- ctx.beginPath();ctx.moveTo(0,-58);ctx.lineTo(-22,-45);ctx.moveTo(0,-58);ctx.lineTo(24,-48);ctx.stroke();
- // head
- ctx.fillStyle='#f0c5a5';ctx.beginPath();ctx.arc(0,-83,9,0,Math.PI*2);ctx.fill();
- ctx.fillStyle='#17283b';ctx.beginPath();ctx.arc(0,-87,10,Math.PI,Math.PI*2);ctx.fill();
+ ctx.beginPath();ctx.moveTo(-18,1);ctx.lineTo(-8,-25);ctx.lineTo(-2,-42);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(18,1);ctx.lineTo(9,-24);ctx.lineTo(2,-42);ctx.stroke();
 
- // carve spray
- const amt=Math.min(15,4+Math.abs(carveVel)*.35);
- ctx.fillStyle='rgba(255,255,255,.75)';
- for(let i=0;i<amt;i++){
-   const sx=-Math.sign(carveVel||1)*(18+Math.random()*38),sy=4+(Math.random()-.5)*18;
-   ctx.fillRect(sx,sy,2+Math.random()*4,2+Math.random()*3);
- }
- ctx.restore();
-}
+ // Tapered jacket/body.
+ ctx.fillStyle='#e26b39';
+ ctx.beginPath();ctx.moveTo(-11,-70);ctx.lineTo(11,-70);ctx.lineTo(14,-42);ctx.lineTo(-13,-42);ctx.closePath();ctx.fill();
 
-function drawAnnouncement(text,y,alpha=1,danger=false){
- ctx.save();
- ctx.textAlign='center';
- ctx.font='900 '+Math.max(20,W*.023)+'px system-ui';
- const m=ctx.measureText(text);
- const padX=18,padY=10;
- const h=Math.max(36,W*.036);
- ctx.globalAlpha=Math.max(0,Math.min(1,alpha));
- ctx.fillStyle=danger?'rgba(88,10,14,.78)':'rgba(8,28,44,.72)';
- ctx.fillRect(W/2-m.width/2-padX,y-h*.72,m.width+padX*2,h);
- // strong dark outline plus white fill remains legible over snow and sky
- ctx.lineWidth=Math.max(3,W*.0035);
- ctx.strokeStyle='rgba(0,0,0,.88)';
- ctx.strokeText(text,W/2,y);
- ctx.fillStyle='#fff';
- ctx.fillText(text,W/2,y);
+ // Arms respond subtly to carve but remain attached to body.
+ ctx.strokeStyle='#e26b39';ctx.lineWidth=8;
+ const armSwing=Math.max(-8,Math.min(8,carveVel*.8));
+ ctx.beginPath();ctx.moveTo(-9,-61);ctx.lineTo(-25,-45-armSwing);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(9,-61);ctx.lineTo(25,-45+armSwing);ctx.stroke();
+
+ // Head + goggles/helmet.
+ ctx.fillStyle='#efc3a3';ctx.beginPath();ctx.arc(0,-79,9,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#263746';ctx.beginPath();ctx.arc(0,-83,10,Math.PI,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#86c7e8';ctx.fillRect(-8,-80,16,4);
+
  ctx.restore();
 }
 function draw(){
