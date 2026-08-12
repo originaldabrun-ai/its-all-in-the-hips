@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#10243b">
-<title>It's All in the Hips — v0.7.6</title>
+<title>It's All in the Hips — v0.8.0</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10243b;color:white;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
@@ -48,7 +48,7 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
    <p>Tilt to carve. Line up jumps, rails, and boxes for points. Dodge trees and skiers. Hold the phone comfortably when you start — that becomes neutral.</p>
    <button id="start">START / ENABLE TILT</button>
    <button id="desktop" class="secondary">DESKTOP TEST</button>
-   <p class="small">v0.7.6 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
+   <p class="small">v0.8.0 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
  </div>
 </div>
 <div id="endOverlay" style="display:none;position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;padding:22px;background:rgba(8,24,42,.94)">
@@ -73,7 +73,7 @@ const quitBtn=document.getElementById('quit'),endOverlay=document.getElementById
 const finalScore=document.getElementById('finalScore'),endReason=document.getElementById('endReason');
 
 let W=0,H=0,dpr=1,last=0,running=false,time=0;
-let score=0,streak=0,gameSpeed=0.34,spawnTimer=.5,skierTimer=1.8,waffleTimer=7,skierHits=0,patrol=false,patrolGap=100,patrolIntro=0,patrolHit=0,patrolLevel=0,finale=false,finaleIntro=0;
+let score=0,streak=0,gameSpeed=0.34,spawnTimer=.5,skierTimer=1.8,waffleTimer=7,skierHits=0,patrol=false,patrolGap=100,patrolIntro=0,patrolHit=0,patrolLevel=0,finale=false,finaleIntro=0,finaleBuilt=false,finaleTime=0,finaleWaffles=0,finaleTotal=0;
 let rawGamma=0,rawBeta=0,neutralGamma=0,neutralBeta=0,tilt=0,motionActive=false;
 let riderX=0,targetX=0,carveVel=0,flash=0,perfectText=0,airTime=0,grindTime=0,grindType='',impactTime=0,impactSide=1,feedback='',feedbackTime=0,boostTime=0;
 let gates=[],snow=[],trees=[],obstacles=[],waffles=[];
@@ -106,7 +106,7 @@ function project(x,z){
 }
 
 function reset(){
- score=0;streak=0;gameSpeed=.34;spawnTimer=.25;skierTimer=1.5;waffleTimer=6+Math.random()*5;skierHits=0;patrol=false;patrolGap=100;patrolIntro=0;patrolHit=0;patrolLevel=0;finale=false;finaleIntro=0;gates=[];snow=[];
+ score=0;streak=0;gameSpeed=.34;spawnTimer=.25;skierTimer=1.5;waffleTimer=6+Math.random()*5;skierHits=0;patrol=false;patrolGap=100;patrolIntro=0;patrolHit=0;patrolLevel=0;finale=false;finaleIntro=0;finaleBuilt=false;finaleTime=0;finaleWaffles=0;finaleTotal=0;gates=[];snow=[];
  riderX=0;targetX=0;carveVel=0;flash=0;perfectText=0;airTime=0;grindTime=0;grindType='';impactTime=0;feedback='';feedbackTime=0;boostTime=0;obstacles=[];waffles=[];
  updateHUD();
 }
@@ -115,7 +115,7 @@ function updateHUD(){
  scoreEl.textContent=score.toLocaleString();
  flowEl.textContent='FLOW ×'+Math.max(1,Math.min(9,1+Math.floor(streak/3)));
  speedEl.textContent=Math.round(24+gameSpeed*105)+' MPH';
- heatEl.textContent=finale?'🏁 FINAL RUN':patrol?('🚨 PATROL '+patrolLevel+'/3  '+Math.round(patrolGap)+'m'):('SKIERS '+skierHits+'/3'+(patrolLevel?' • HEAT '+patrolLevel+'/3':''));
+ heatEl.textContent=finale?('🏁 FINAL RUN • 🧇 '+finaleWaffles+'/'+(finaleTotal||'?')):patrol?('🚨 PATROL '+patrolLevel+'/3  '+Math.round(patrolGap)+'m'):('SKIERS '+skierHits+'/3'+(patrolLevel?' • HEAT '+patrolLevel+'/3':''));
 }
 
 function drawSpeedometer(){
@@ -200,6 +200,41 @@ function burst(x,y){
  }
 }
 
+function buildFinale(){
+ finaleBuilt=true;finaleTime=0;
+ gates=[];obstacles=[];waffles=[];
+ // Authored Paperboy-style finishing chute.
+ // Three visible routes diverge, cross, then converge. Riskier outside lines carry more waffles.
+ const addW=(x,z)=>waffles.push({x,z:-.62+z*.62,hit:false,spin:Math.random()*Math.PI*2,finale:true});
+ const addTree=(x,z)=>obstacles.push({x,z:-.62+z*.62,type:'tree',hit:false,baseX:x,wobble:0,finale:true});
+ const addFeature=(type,x,z)=>gates.push({type,x,z:-.62+z*.62,hit:false,miss:false,finale:true});
+
+ // Opening fan: choose a line early.
+ [[-.42,.08],[0,.10],[.42,.08],
+  [-.48,.17],[-.12,.18],[.48,.17],
+  [-.52,.27],[-.20,.27],[.18,.27],[.52,.27],
+  // Crossing middle routes
+  [-.40,.38],[-.08,.38],[.24,.38],[.50,.38],
+  [-.30,.49],[0,.49],[.30,.49],
+  // High-value technical weave
+  [-.52,.60],[-.28,.60],[.12,.60],[.40,.60],[.58,.60],
+  [-.42,.71],[-.12,.71],[.18,.71],[.48,.71],
+  // Final convergence
+  [-.25,.82],[0,.82],[.25,.82],[0,.91]].forEach(q=>addW(q[0],q[1]));
+
+ // Trees force commitment and prevent simply sweeping every waffle.
+ [[-.02,.22],[-.34,.33],[.34,.33],[0,.43],[-.48,.53],[.48,.53],[-.18,.64],[.20,.64],[-.38,.76],[.38,.76]].forEach(q=>addTree(q[0],q[1]));
+
+ // A couple of park choices embedded in the finish.
+ addFeature('box',-.28,.56); addFeature('jump',.30,.56); addFeature('rail',0,.75);
+ finaleTotal=waffles.length;
+ feedback='🧇 PICK YOUR LINE!';feedbackTime=1.8;
+}
+
+function finishFinale(){
+ const bonus=finaleWaffles*1000;
+ endRun('🏁 RUN COMPLETE • '+finaleWaffles+'/'+finaleTotal+' FINALE WAFFLES • +'+bonus.toLocaleString()+' WAFFLE POINTS');
+}
 function update(dt){
  time+=dt;
  let input=0;
@@ -240,7 +275,7 @@ function update(dt){
  for(const w of waffles){
    w.z+=gameSpeed*dt;w.spin+=dt*3;
    if(!w.hit&&w.z>.88&&w.z<1.03&&Math.abs(riderX-w.x)<.12){
-     w.hit=true;score+=1000;feedback='🧇 LIÈGE WAFFLE  +1000';feedbackTime=1.15;
+     w.hit=true;score+=1000;if(w.finale)finaleWaffles++;feedback=w.finale?('🧇 FINALE '+finaleWaffles+'/'+finaleTotal+'  +1000'):'🧇 LIÈGE WAFFLE  +1000';feedbackTime=1.15;
      const wp=project(w.x,w.z);burst(wp.x,wp.y);updateHUD();
      try{if(navigator.vibrate)navigator.vibrate([18,20,18]);}catch(e){}
    }
@@ -290,7 +325,7 @@ function update(dt){
          if(skierHits>=3){
            if(patrolLevel>=3){
              // Fourth heat event launches the finish instead of an impossible patrol chase.
-             patrol=false;finale=true;finaleIntro=2.2;skierHits=0;
+             patrol=false;finale=true;finaleIntro=2.2;finaleBuilt=false;finaleTime=0;finaleWaffles=0;skierHits=0;gates=[];obstacles=[];waffles=[];
              feedback='🏁 FINAL RUN AHEAD 🧇';feedbackTime=2.0;
            }else{
              patrol=true;patrolLevel++;
@@ -320,8 +355,17 @@ function update(dt){
  snow=snow.filter(s=>s.life>0);
  if(finale){
    finaleIntro=Math.max(0,finaleIntro-dt);
-   // Let existing objects wash off-screen, but stop generating normal mountain traffic.
-   if(finaleIntro>0){ feedback='🏁 FINAL RUN AHEAD 🧇'; feedbackTime=Math.max(feedbackTime,.12); }
+   if(finaleIntro>0){
+     feedback='🏁 FINAL RUN AHEAD 🧇';feedbackTime=Math.max(feedbackTime,.12);
+   }else if(!finaleBuilt){
+     buildFinale();
+   }else{
+     finaleTime+=dt;
+     // Once the authored chute has passed the rider, finish the run.
+     if(finaleTime>12.5 && waffles.filter(w=>w.finale).length===0 && gates.filter(g=>g.finale).length===0){
+       finishFinale();return;
+     }
+   }
  }
  if(patrol){
    patrolIntro=Math.max(0,patrolIntro-dt);
@@ -563,7 +607,7 @@ function drawRider(){
  let carveHeading=0;
  if(Math.abs(carveVel)>dead){
    const strength=Math.min(1,Math.abs(carveVel)/7.0);
-   carveHeading=Math.sign(carveVel)*(.28 + strength*(Math.PI/4-.28));
+   carveHeading=-Math.sign(carveVel)*(.28 + strength*(Math.PI/4-.28));
  }
  // Smooth-looking visual heading, but still snaps back toward straight near center.
  ctx.rotate(carveHeading + trickRot);
