@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#10243b">
-<title>It's All in the Hips — v0.7.1</title>
+<title>It's All in the Hips — v0.7.2</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10243b;color:white;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
@@ -33,7 +33,8 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
 <div id="hud">
   <div id="score">0</div>
   <div id="flow">FLOW ×1</div>
-  <div id="speed">0 MPH</div>
+  <div id="speed" style="display:none">0 MPH</div>
+  <canvas id="speedo" style="position:absolute;right:max(12px,env(safe-area-inset-right));top:50%;transform:translateY(-50%);width:112px;height:112px"></canvas>
   <div id="heat" style="position:absolute;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);font-size:13px;font-weight:900">SKIERS 0/3</div>
   <div id="status">← → or A / D on desktop</div>
 </div>
@@ -47,7 +48,7 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
    <p>Tilt to carve. Line up jumps, rails, and boxes for points. Dodge trees and skiers. Hold the phone comfortably when you start — that becomes neutral.</p>
    <button id="start">START / ENABLE TILT</button>
    <button id="desktop" class="secondary">DESKTOP TEST</button>
-   <p class="small">v0.7.1 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
+   <p class="small">v0.7.2 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
  </div>
 </div>
 <div id="endOverlay" style="display:none;position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;padding:22px;background:rgba(8,24,42,.94)">
@@ -66,6 +67,7 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
 const c=document.getElementById('game'),ctx=c.getContext('2d');
 const scoreEl=document.getElementById('score'),flowEl=document.getElementById('flow');
 const speedEl=document.getElementById('speed'),statusEl=document.getElementById('status'),heatEl=document.getElementById('heat');
+const speedo=document.getElementById('speedo'),sctx=speedo.getContext('2d');
 const overlay=document.getElementById('overlay'),calBtn=document.getElementById('calibrate');
 const quitBtn=document.getElementById('quit'),endOverlay=document.getElementById('endOverlay');
 const finalScore=document.getElementById('finalScore'),endReason=document.getElementById('endReason');
@@ -116,6 +118,20 @@ function updateHUD(){
  heatEl.textContent=patrol?('🚨 PATROL '+patrolLevel+'/4  '+Math.round(patrolGap)+'m'):('SKIERS '+skierHits+'/3'+(patrolLevel?' • HEAT '+patrolLevel+'/4':''));
 }
 
+function drawSpeedometer(){
+ const css=112,sd=Math.min(devicePixelRatio||1,2);
+ if(speedo.width!==css*sd){speedo.width=css*sd;speedo.height=css*sd;sctx.setTransform(sd,0,0,sd,0,0);}
+ const cx=56,cy=57,r=43; sctx.clearRect(0,0,css,css);
+ sctx.fillStyle='rgba(8,28,44,.70)';sctx.beginPath();sctx.arc(cx,cy,r+9,0,Math.PI*2);sctx.fill();
+ const start=Math.PI*.75,end=Math.PI*2.25;
+ sctx.strokeStyle='rgba(255,255,255,.28)';sctx.lineWidth=5;sctx.beginPath();sctx.arc(cx,cy,r,start,end);sctx.stroke();
+ const pct=Math.max(0,Math.min(1,(gameSpeed-.22)/(1.275-.22))),ang=start+(end-start)*pct;
+ sctx.strokeStyle='#fff';sctx.lineWidth=5;sctx.beginPath();sctx.arc(cx,cy,r,start,ang);sctx.stroke();
+ for(let i=0;i<=8;i++){const a=start+(end-start)*(i/8);sctx.strokeStyle='rgba(255,255,255,.7)';sctx.lineWidth=1.5;sctx.beginPath();sctx.moveTo(cx+Math.cos(a)*(r-7),cy+Math.sin(a)*(r-7));sctx.lineTo(cx+Math.cos(a)*(r-1),cy+Math.sin(a)*(r-1));sctx.stroke();}
+ sctx.strokeStyle='#fff';sctx.lineWidth=3;sctx.beginPath();sctx.moveTo(cx,cy);sctx.lineTo(cx+Math.cos(ang)*(r-10),cy+Math.sin(ang)*(r-10));sctx.stroke();
+ sctx.fillStyle='#fff';sctx.beginPath();sctx.arc(cx,cy,4,0,Math.PI*2);sctx.fill();
+ sctx.textAlign='center';sctx.font='900 16px system-ui';sctx.fillText(Math.round(24+gameSpeed*105),cx,cy+24);sctx.font='800 8px system-ui';sctx.fillText('MPH',cx,cy+34);
+}
 function calibrate(){
  neutralGamma=rawGamma||0;
  neutralBeta=rawBeta||0;
@@ -630,7 +646,7 @@ function draw(){
 function loop(now){
  if(!running)return;
  const dt=Math.min(.033,(now-last)/1000||0);last=now;
- update(dt);draw();requestAnimationFrame(loop);
+ update(dt);draw();drawSpeedometer();requestAnimationFrame(loop);
 }
 draw();
 })();
