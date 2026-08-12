@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#10243b">
-<title>It's All in the Hips — v0.7.2</title>
+<title>It's All in the Hips — v0.7.3</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10243b;color:white;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
@@ -48,7 +48,7 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
    <p>Tilt to carve. Line up jumps, rails, and boxes for points. Dodge trees and skiers. Hold the phone comfortably when you start — that becomes neutral.</p>
    <button id="start">START / ENABLE TILT</button>
    <button id="desktop" class="secondary">DESKTOP TEST</button>
-   <p class="small">v0.7.2 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
+   <p class="small">v0.7.3 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
  </div>
 </div>
 <div id="endOverlay" style="display:none;position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;padding:22px;background:rgba(8,24,42,.94)">
@@ -543,17 +543,23 @@ function drawRider(){
  }
  if(impactTime>0){animRot=-impactSide*.65*(impactTime/.65);animY=-Math.sin((1-impactTime/.65)*Math.PI)*18;}
  ctx.translate(p.x,p.y+animY);
+
+ // BOARD: draw independently in screen space so the carve angle is unmistakable.
+ // Lateral velocity makes it slash one way or the other; near zero returns horizontal.
+ const carveAngle=Math.max(-.62,Math.min(.62,carveVel*.085));
+ ctx.save();
+ ctx.rotate(carveAngle);
+ ctx.fillStyle='#17283b';
+ ctx.beginPath();ctx.roundRect(-45,0,90,10,5);ctx.fill();
+ ctx.fillStyle='rgba(255,255,255,.28)';ctx.fillRect(-31,2,62,2);
+ // bindings make board orientation easier to perceive
+ ctx.fillStyle='#506173';ctx.fillRect(-19,-2,8,14);ctx.fillRect(11,-2,8,14);
+ ctx.restore();
+
+ // RIDER: lean/trick transforms are separate from board carve.
  const lean=Math.max(-.5,Math.min(.5,carveVel*.035));
  ctx.rotate(lean+animRot);
  ctx.transform(spinScaleX,0,spinSkew,1,0,0);
-
- // shadow
- ctx.fillStyle='rgba(35,67,86,.16)';ctx.beginPath();ctx.ellipse(10,13,42,9,0,0,Math.PI*2);ctx.fill();
-
- // board
- ctx.rotate(-lean*.4);
- ctx.fillStyle='#17283b';ctx.beginPath();ctx.ellipse(0,5,40,6,0,0,Math.PI*2);ctx.fill();
- ctx.rotate(lean*.4);
 
  // rider legs/body
  ctx.strokeStyle='#18283a';ctx.lineWidth=7;ctx.lineCap='round';
