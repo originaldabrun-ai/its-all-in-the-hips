@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#10243b">
-<title>It's All in the Hips — v0.8.0</title>
+<title>It's All in the Hips — v0.9.0</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10243b;color:white;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
@@ -47,8 +47,9 @@ h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:.95;letter-spacing:-.04em
    <div class="kicker">🏂 Bomb the hill. Hit the features. Don't eat shit.</div>
    <p>Tilt to carve. Line up jumps, rails, and boxes for points. Dodge trees and skiers. Hold the phone comfortably when you start — that becomes neutral.</p>
    <button id="start">START / ENABLE TILT</button>
-   <button id="desktop" class="secondary">DESKTOP TEST</button>
-   <p class="small">v0.8.0 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
+   <button id="desktop" class="secondary">PLAY ON DESKTOP</button>
+   <button id="fullscreen" class="secondary">FULL SCREEN</button>
+   <p class="small">v0.9.0 • Mobile tilt requires motion permission and HTTPS. GitHub Pages works.</p>
  </div>
 </div>
 <div id="endOverlay" style="display:none;position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;padding:22px;background:rgba(8,24,42,.94)">
@@ -71,13 +72,28 @@ const speedo=document.getElementById('speedo'),sctx=speedo.getContext('2d');
 const overlay=document.getElementById('overlay'),calBtn=document.getElementById('calibrate');
 const quitBtn=document.getElementById('quit'),endOverlay=document.getElementById('endOverlay');
 const finalScore=document.getElementById('finalScore'),endReason=document.getElementById('endReason');
+const fsBtn=document.getElementById('fullscreen'),fsGame=document.getElementById('fsGame');
+let desktopMode=false;
 
 let W=0,H=0,dpr=1,last=0,running=false,time=0;
 let score=0,streak=0,gameSpeed=0.34,spawnTimer=.5,skierTimer=1.8,waffleTimer=7,skierHits=0,patrol=false,patrolGap=100,patrolIntro=0,patrolHit=0,patrolLevel=0,finale=false,finaleIntro=0,finaleBuilt=false,finaleTime=0,finaleWaffles=0,finaleTotal=0;
 let rawGamma=0,rawBeta=0,neutralGamma=0,neutralBeta=0,tilt=0,motionActive=false;
 let riderX=0,targetX=0,carveVel=0,flash=0,perfectText=0,airTime=0,grindTime=0,grindType='',impactTime=0,impactSide=1,feedback='',feedbackTime=0,boostTime=0;
-let gates=[],snow=[],trees=[],obstacles=[],waffles=[];
+let gates=[],snow=[],trees=[],obstacles=[],waffles=[];let wallCooldown=0;
 const keys={};
+
+async function enterFullscreen(){
+ try{
+   const el=document.documentElement;
+   if(el.requestFullscreen){await el.requestFullscreen();return;}
+   if(el.webkitRequestFullscreen){el.webkitRequestFullscreen();return;}
+ }catch(e){}
+ // iPhone Safari does not expose the standard Fullscreen API for arbitrary pages.
+ // Best available browser fallback is encouraging standalone/PWA-style launch.
+ feedback='iPhone: Share → Add to Home Screen for full-screen play';
+ feedbackTime=3.2;
+}
+fsBtn.onclick=enterFullscreen;fsGame.onclick=enterFullscreen;
 
 function resize(){
  dpr=Math.min(devicePixelRatio||1,2); W=innerWidth; H=innerHeight;
@@ -203,49 +219,80 @@ function burst(x,y){
 function buildFinale(){
  finaleBuilt=true;finaleTime=0;
  gates=[];obstacles=[];waffles=[];
- // Authored Paperboy-style finishing chute.
- // Three visible routes diverge, cross, then converge. Riskier outside lines carry more waffles.
- const addW=(x,z)=>waffles.push({x,z:-.62+z*.62,hit:false,spin:Math.random()*Math.PI*2,finale:true});
- const addTree=(x,z)=>obstacles.push({x,z:-.62+z*.62,type:'tree',hit:false,baseX:x,wobble:0,finale:true});
- const addFeature=(type,x,z)=>gates.push({type,x,z:-.62+z*.62,hit:false,miss:false,finale:true});
 
- // Opening fan: choose a line early.
- [[-.42,.08],[0,.10],[.42,.08],
-  [-.48,.17],[-.12,.18],[.48,.17],
-  [-.52,.27],[-.20,.27],[.18,.27],[.52,.27],
-  // Crossing middle routes
-  [-.40,.38],[-.08,.38],[.24,.38],[.50,.38],
-  [-.30,.49],[0,.49],[.30,.49],
-  // High-value technical weave
-  [-.52,.60],[-.28,.60],[.12,.60],[.40,.60],[.58,.60],
-  [-.42,.71],[-.12,.71],[.18,.71],[.48,.71],
-  // Final convergence
-  [-.25,.82],[0,.82],[.25,.82],[0,.91]].forEach(q=>addW(q[0],q[1]));
+ const addW=(x,z)=>waffles.push({x,z,hit:false,spin:Math.random()*Math.PI*2,finale:true});
+ const addTree=(x,z)=>obstacles.push({x,z,type:'tree',hit:false,baseX:x,wobble:0,finale:true,solid:true});
+ const addFeature=(type,x,z)=>gates.push({type,x,z,hit:false,miss:false,finale:true});
 
- // Trees force commitment and prevent simply sweeping every waffle.
- [[-.02,.22],[-.34,.33],[.34,.33],[0,.43],[-.48,.53],[.48,.53],[-.18,.64],[.20,.64],[-.38,.76],[.38,.76]].forEach(q=>addTree(q[0],q[1]));
+ // Long authored finale: three narrow trails through dense trees.
+ // z starts far above the horizon and reaches the rider over roughly 25–30 seconds.
+ const rows=34;
+ for(let i=0;i<rows;i++){
+   const z=-7.2+i*.235;
+   const t=i/(rows-1);
 
- // A couple of park choices embedded in the finish.
- addFeature('box',-.28,.56); addFeature('jump',.30,.56); addFeature('rail',0,.75);
+   // Three trail centers weave and occasionally cross.
+   const left=-.48 + Math.sin(i*.48)*.13;
+   const center=Math.sin(i*.36+1.2)*.18;
+   const right=.48 + Math.sin(i*.44+2.1)*.13;
+   const paths=[left,center,right];
+
+   // Waffles define each line. Offset some rows to create route decisions.
+   paths.forEach((x,j)=>{
+     if((i+j)%3!==1 || i%5===0)addW(x,z+.03*j);
+   });
+
+   // Dense tree walls between and outside the trails.
+   // Gaps are intentionally tight: about .22-.27 wide.
+   const sorted=[...paths].sort((x,y)=>x-y);
+   const boundaries=[-.78,(sorted[0]+sorted[1])/2,(sorted[1]+sorted[2])/2,.78];
+   for(let k=0;k<boundaries.length;k++){
+     const bx=boundaries[k] + Math.sin(i*.91+k)*.025;
+     addTree(bx,z);
+     // stagger a second tree to make walls feel continuous rather than isolated dots
+     if(i%2===0)addTree(bx+(k%2?-.035:.035),z-.105);
+   }
+
+   // Occasional criss-cross payoff rows: route-specific feature/waffle choices.
+   if(i===8)addFeature('box',left,z+.05);
+   if(i===15)addFeature('jump',right,z+.05);
+   if(i===22)addFeature('rail',center,z+.05);
+   if(i===28){addW(left,z-.06);addW(center,z-.02);addW(right,z+.02);}
+ }
+
+ // Final center chute and finish waffle.
+ for(let i=0;i<6;i++){
+   const z=.80+i*.18;
+   addTree(-.27,z);addTree(.27,z);addW(0,z);
+ }
  finaleTotal=waffles.length;
- feedback='🧇 PICK YOUR LINE!';feedbackTime=1.8;
+ feedback='🧇 PICK A TRAIL!';feedbackTime=2.0;
 }
-
 function finishFinale(){
  const bonus=finaleWaffles*1000;
  endRun('🏁 RUN COMPLETE • '+finaleWaffles+'/'+finaleTotal+' FINALE WAFFLES • +'+bonus.toLocaleString()+' WAFFLE POINTS');
 }
 function update(dt){
- time+=dt;
- let input=0;
- if(keys['arrowleft']||keys['a'])input=-1;
- if(keys['arrowright']||keys['d'])input=1;
- if(!input)input=tilt;
-
- targetX=input*.72;
+ time+=dt;wallCooldown=Math.max(0,wallCooldown-dt);
  const old=riderX;
- riderX+=(targetX-riderX)*Math.min(1,dt*5.5);
- carveVel=(riderX-old)/Math.max(dt,.001);
+ if(desktopMode){
+   // Desktop is now a real control scheme: keys steer the rider's position,
+   // and releasing them leaves the rider where they are instead of snapping to center.
+   let dir=0;
+   if(keys['arrowleft']||keys['a'])dir-=1;
+   if(keys['arrowright']||keys['d'])dir+=1;
+   carveVel+=dir*dt*8.2;
+   carveVel*=Math.pow(.055,dt); // friction: stops turning, not position
+   riderX+=carveVel*dt;
+   riderX=Math.max(-.76,Math.min(.76,riderX));
+   if((riderX<=-.76&&carveVel<0)||(riderX>=.76&&carveVel>0))carveVel=0;
+   targetX=riderX;
+ }else{
+   const input=tilt;
+   targetX=input*.72;
+   riderX+=(targetX-riderX)*Math.min(1,dt*5.5);
+   carveVel=(riderX-old)/Math.max(dt,.001);
+ }
 
  gameSpeed=Math.min(1.275,.34+Math.max(0,score)/62000+(boostTime>0?.075:0));
  boostTime=Math.max(0,boostTime-dt);
@@ -312,6 +359,16 @@ function update(dt){
      o.x=Math.max(-.76,Math.min(.76,o.baseX+Math.sin(time*1.65+o.wobble)*.13));
    }
    if(!o.hit&&o.z>.895&&o.z<1.02&&Math.abs(riderX-o.x)<(o.type==='tree'?.075:.09)){
+     if(finale&&o.type==='tree'&&o.solid&&wallCooldown<=0){
+       // Finale trees are hard walls: bounce away, kill momentum, but do not remove the tree.
+       wallCooldown=.28;impactTime=.48;impactSide=Math.sign(o.x-riderX)||1;
+       riderX-=impactSide*.11;riderX=Math.max(-.76,Math.min(.76,riderX));
+       carveVel=-impactSide*.35;
+       score=Math.max(0,score-300);
+       gameSpeed=Math.max(.22,gameSpeed-.22);
+       feedback='🌲 BLOCKED!  -300';feedbackTime=.7;flash=.12;
+       continue;
+     }
      o.hit=true;
      impactTime=.65; impactSide=Math.sign(o.x-riderX)||1;
      streak=0;
@@ -362,7 +419,7 @@ function update(dt){
    }else{
      finaleTime+=dt;
      // Once the authored chute has passed the rider, finish the run.
-     if(finaleTime>12.5 && waffles.filter(w=>w.finale).length===0 && gates.filter(g=>g.finale).length===0){
+     if(finaleTime>28 && waffles.filter(w=>w.finale).length===0 && gates.filter(g=>g.finale).length===0){
        finishFinale();return;
      }
    }
